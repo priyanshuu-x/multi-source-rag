@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Source RAG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --void: #0A0912;
+    --panel: rgba(21, 18, 34, 0.78);
+    --panel-border: rgba(155, 130, 255, 0.16);
+    --violet: #9B82FF;
+    --magenta: #E17FE0;
+    --grad: linear-gradient(135deg, var(--violet) 0%, var(--magenta) 100%);
+    --text: #F2F0FA;
+    --text-muted: #9691B0;
+    --danger: #F5678F;
+    --success: #6EE7A0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  canvas#bg {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+  }
+
+  .glow {
+    position: fixed;
+    top: -20%; left: 50%;
+    transform: translateX(-50%);
+    width: 900px; height: 900px;
+    background: radial-gradient(circle, rgba(155,130,255,0.18) 0%, rgba(225,127,224,0.08) 40%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .shell {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    min-height: 100vh;
+  }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--panel-border); }
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    background: var(--panel);
+    border-right: 1px solid var(--panel-border);
+    backdrop-filter: blur(16px);
+    padding: 28px 22px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .wordmark {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 2px;
+  }
+  .wordmark .dot-accent { color: var(--magenta); }
+
+  .tagline {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 32px;
+  }
+
+  .eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    color: var(--violet);
+    text-transform: uppercase;
+    margin: 0 0 14px;
+  }
+
+  .toggle-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .toggle-btn {
+    flex: 1;
+    padding: 8px 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .toggle-btn.active {
+    color: #14101f;
+    background: var(--grad);
+    border-color: transparent;
+    font-weight: 600;
+  }
+
+  label {
+    display: block;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin: 14px 0 6px;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  input[type="text"], select {
+    width: 100%;
+    padding: 9px 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.83rem;
+  }
+  input[type="text"]:focus, select:focus {
+    outline: 2px solid var(--violet);
+    outline-offset: 1px;
+  }
+
+  /* The dropdown popup list uses the browser's own rendering, separate from
+     the closed <select> box above - needs its own color/background or it falls
+     back to light text on a white popup (barely visible). */
+  select option {
+    background: #15121F;
+    color: var(--text);
+  }
+
+  /* Custom file dropzone - replaces the raw native <input type="file"> look */
+  .file-drop {
+    border: 1px dashed var(--panel-border);
+    border-radius: 10px;
+    padding: 18px 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: rgba(255,255,255,0.02);
+  }
+  .file-drop:hover, .file-drop.active {
+    border-color: var(--violet);
+    background: rgba(155,130,255,0.06);
+  }
+  .file-drop-icon {
+    display: block;
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .file-drop-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .file-drop.has-file .file-drop-label { color: var(--text); }
+  .file-drop input[type="file"] { display: none; }
+
+  button.primary {
+    width: 100%;
+    margin-top: 16px;
+    padding: 10px;
+    background: var(--grad);
+    border: none;
+    border-radius: 100px;
+    color: #14101f;
+    font-weight: 600;
+    font-size: 0.86rem;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.15s, opacity 0.15s;
+  }
+  button.primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px -6px rgba(155,130,255,0.5);
+  }
+  button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .msg {
+    margin-top: 12px;
+    font-size: 0.78rem;
+    padding: 8px 10px;
+    border-radius: 8px;
+    display: none;
+  }
+  .msg.success { display: block; background: rgba(110,231,160,0.1); color: var(--success); }
+  .msg.error { display: block; background: rgba(245,103,143,0.1); color: var(--danger); }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid var(--panel-border);
+  }
+
+  .status {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+  .dot.ok { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .dot.down { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+  /* ---------- Main content ---------- */
+  .content {
+    padding: 60px 40px 80px;
+    max-width: 880px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .hero { text-align: center; margin-bottom: 56px; }
+
+  .hero .eyebrow { justify-content: center; display: flex; }
+
+  .hero h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: clamp(2.4rem, 5vw, 3.6rem);
+    line-height: 1.05;
+    margin: 0 0 36px;
+    background: linear-gradient(135deg, var(--text) 25%, var(--violet) 65%, var(--magenta) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .ask-box {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 10px 10px 10px 22px;
+    backdrop-filter: blur(16px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 20px 60px -20px rgba(155,130,255,0.2);
+  }
+
+  .ask-box input[type="text"] {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 1rem;
+    padding: 10px 0;
+  }
+  .ask-box input[type="text"]:focus { outline: none; }
+
+  .ask-box button.primary {
+    width: auto;
+    margin-top: 0;
+    padding: 12px 24px;
+    white-space: nowrap;
+  }
+
+  .ask-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .ask-controls label { margin: 0; white-space: nowrap; }
+  .ask-controls input[type="range"] { width: 180px; accent-color: var(--violet); }
+  .range-value { font-family: 'Space Mono', monospace; color: var(--violet); font-size: 0.8rem; }
+
+  #askMsg { text-align: center; max-width: 500px; margin: 12px auto 0; }
+
+  /* ---------- History ---------- */
+  .history { display: flex; flex-direction: column; gap: 18px; }
+
+  .qa {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    backdrop-filter: blur(12px);
+  }
+  .qa .q {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--violet);
+    margin-bottom: 10px;
+  }
+  .qa .a {
+    font-size: 0.94rem;
+    line-height: 1.65;
+    color: var(--text);
+  }
+  .qa .sources {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .qa .source-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
+    border-radius: 100px;
+    padding: 3px 10px;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--void);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<div class="glow"></div>
+
+<div class="shell">
+  <aside class="sidebar">
+    <p class="wordmark">rag<span class="dot-accent">.</span></p>
+    <p class="tagline">Multi-source knowledge console</p>
+
+    <p class="eyebrow">Add a source</p>
+
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="modeFileBtn" onclick="setUploadMode('file')">File</button>
+      <button class="toggle-btn" id="modeUrlBtn" onclick="setUploadMode('url')">URL</button>
+    </div>
+
+    <div id="fileFields">
+      <label for="fileInput">Choose a file (PDF / DOCX / Markdown)</label>
+      <div class="file-drop" id="fileDrop">
+        <span class="file-drop-icon">&#8593;</span>
+        <span class="file-drop-label" id="fileDropLabel">Drop a file here or click to browse</span>
+        <input type="file" id="fileInput" accept=".pdf,.docx,.md">
+      </div>
+      <label for="fileType">File type</label>
+      <select id="fileType">
+        <option value="pdf">pdf</option>
+        <option value="docx">docx</option>
+        <option value="markdown">markdown</option>
+      </select>
+      <button class="primary" id="uploadFileBtn" onclick="handleFileUpload()">Upload file</button>
+    </div>
+
+    <div id="urlFields" style="display:none;">
+      <label for="urlInput">URL</label>
+      <input type="text" id="urlInput" placeholder="https://...">
+      <label for="urlType">URL type</label>
+      <select id="urlType">
+        <option value="website">website</option>
+        <option value="youtube">youtube</option>
+      </select>
+      <button class="primary" id="uploadUrlBtn" onclick="handleUrlUpload()">Upload URL</button>
+    </div>
+
+    <div class="msg" id="uploadMsg"></div>
+
+    <div class="sidebar-footer">
+      <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">checking backend...</span></div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="hero">
+      <p class="eyebrow">Ask your knowledge base</p>
+      <h1>What do you want<br>to know?</h1>
+
+      <div class="ask-box">
+        <input type="text" id="questionInput" placeholder="Ask a question about what you've added...">
+        <button class="primary" id="askBtn" onclick="handleAsk()">Ask</button>
+      </div>
+      <div class="msg" id="askMsg"></div>
+    </div>
+
+    <div class="history" id="history"></div>
+    <p class="empty-state" id="emptyState">No questions yet — add a source in the sidebar, then ask something.</p>
+  </main>
+</div>
+
+<script>
+  // ---------- Config ----------
+  const BACKEND_URL = ""; // change this if your backend runs elsewhere
+
+  // ---------- Backend-calling functions ----------
+  async function getErrorDetail(response) {
+    try {
+      const data = await response.json();
+      return data.detail || `Request failed with status ${response.status}`;
+    } catch {
+      return `Request failed with status ${response.status}`;
+    }
+  }
+
+  async function checkBackendHealth() {
+    try {
+      const r = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(3000) });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function uploadFileToBackend(file, sourceType) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("source_type", sourceType);
+    let r;
+    try {
+      r = await fetch(`${BACKEND_URL}/upload/file`, { method: "POST", body: form });
+    } catch (e) {
+      throw new Error(`Could not reach the backend: ${e.message}`);
+    }
+    if (!r.ok) throw new Error(await getErrorDetail(r));
+    return r.json();
+  }
+
+  async function uploadUrlToBackend(url, sourceType) {
+    let r;
+    try {
+      r = await fetch(`${BACKEND_URL}/upload/url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, source_type: sourceType }),
+      });
+    } catch (e) {
+      throw new Error(`Could not reach the backend: ${e.message}`);
+    }
+    if (!r.ok) throw new Error(await getErrorDetail(r));
+    return r.json();
+  }
+
+  async function askBackend(query, topK) {
+    let r;
+    try {
+      r = await fetch(`${BACKEND_URL}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, top_k: topK }),
+      });
+    } catch (e) {
+      throw new Error(`Could not reach the backend: ${e.message}`);
+    }
+    if (!r.ok) throw new Error(await getErrorDetail(r));
+    return r.json();
+  }
+
+  // ---------- Custom file dropzone ----------
+  const fileDrop = document.getElementById("fileDrop");
+  const fileInputEl = document.getElementById("fileInput");
+  const fileDropLabel = document.getElementById("fileDropLabel");
+
+  function updateFileDropLabel() {
+    if (fileInputEl.files.length) {
+      fileDropLabel.textContent = fileInputEl.files[0].name;
+      fileDrop.classList.add("has-file");
+    } else {
+      fileDropLabel.textContent = "Drop a file here or click to browse";
+      fileDrop.classList.remove("has-file");
+    }
+  }
+
+  fileDrop.addEventListener("click", () => fileInputEl.click());
+  fileInputEl.addEventListener("change", updateFileDropLabel);
+
+  ["dragover", "dragenter"].forEach(evt =>
+    fileDrop.addEventListener(evt, (e) => {
+      e.preventDefault();
+      fileDrop.classList.add("active");
+    })
+  );
+  ["dragleave", "dragend"].forEach(evt =>
+    fileDrop.addEventListener(evt, () => fileDrop.classList.remove("active"))
+  );
+  fileDrop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    fileDrop.classList.remove("active");
+    if (e.dataTransfer.files.length) {
+      fileInputEl.files = e.dataTransfer.files;
+      updateFileDropLabel();
+    }
+  });
+
+  // ---------- UI wiring ----------
+  function setUploadMode(mode) {
+    const isFile = mode === "file";
+    document.getElementById("fileFields").style.display = isFile ? "block" : "none";
+    document.getElementById("urlFields").style.display = isFile ? "none" : "block";
+    document.getElementById("modeFileBtn").classList.toggle("active", isFile);
+    document.getElementById("modeUrlBtn").classList.toggle("active", !isFile);
+    document.getElementById("uploadMsg").className = "msg";
+  }
+
+  function showMsg(id, text, kind) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = `msg ${kind}`;
+  }
+
+  function setButtonLoading(btn, loading, label) {
+    btn.disabled = loading;
+    btn.innerHTML = loading ? `<span class="spinner"></span>${label}...` : label;
+  }
+
+  async function handleFileUpload() {
+    const fileInput = document.getElementById("fileInput");
+    const sourceType = document.getElementById("fileType").value;
+    const btn = document.getElementById("uploadFileBtn");
+    if (!fileInput.files.length) {
+      showMsg("uploadMsg", "Choose a file first.", "error");
+      return;
+    }
+    setButtonLoading(btn, true, "Upload file");
+    try {
+      const result = await uploadFileToBackend(fileInput.files[0], sourceType);
+      showMsg("uploadMsg", `Indexed ${result.chunks_indexed} chunks from ${result.source}`, "success");
+    } catch (e) {
+      showMsg("uploadMsg", e.message, "error");
+    } finally {
+      setButtonLoading(btn, false, "Upload file");
+    }
+  }
+
+  async function handleUrlUpload() {
+    const url = document.getElementById("urlInput").value.trim();
+    const sourceType = document.getElementById("urlType").value;
+    const btn = document.getElementById("uploadUrlBtn");
+    if (!url) {
+      showMsg("uploadMsg", "Enter a URL first.", "error");
+      return;
+    }
+    setButtonLoading(btn, true, "Upload URL");
+    try {
+      const result = await uploadUrlToBackend(url, sourceType);
+      showMsg("uploadMsg", `Indexed ${result.chunks_indexed} chunks from ${result.source}`, "success");
+    } catch (e) {
+      showMsg("uploadMsg", e.message, "error");
+    } finally {
+      setButtonLoading(btn, false, "Upload URL");
+    }
+  }
+
+  async function handleAsk() {
+    const questionInput = document.getElementById("questionInput");
+    const query = questionInput.value.trim();
+    const topK = 5;
+    const btn = document.getElementById("askBtn");
+    if (!query) {
+      showMsg("askMsg", "Type a question first.", "error");
+      return;
+    }
+    document.getElementById("askMsg").className = "msg";
+    setButtonLoading(btn, true, "Ask");
+    try {
+      const result = await askBackend(query, topK);
+      addToHistory(query, result.answer, result.sources);
+      questionInput.value = "";
+    } catch (e) {
+      showMsg("askMsg", e.message, "error");
+    } finally {
+      setButtonLoading(btn, false, "Ask");
+    }
+  }
+
+  function addToHistory(question, answer, sources) {
+    document.getElementById("emptyState").style.display = "none";
+    const entry = document.createElement("div");
+    entry.className = "qa";
+    const tags = sources.map(s => `<span class="source-tag">${escapeHtml(s)}</span>`).join("");
+    entry.innerHTML = `
+      <div class="q">${escapeHtml(question)}</div>
+      <div class="a">${escapeHtml(answer)}</div>
+      <div class="sources">${tags}</div>
+    `;
+    document.getElementById("history").prepend(entry);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function initStatus() {
+    const ok = await checkBackendHealth();
+    document.getElementById("statusDot").className = `dot ${ok ? "ok" : "down"}`;
+    document.getElementById("statusText").textContent = ok
+      ? `connected`
+      : `unreachable`;
+  }
+  initStatus();
+
+  // ---------- 3D background: a drifting vector-space point field ----------
+  (function initScene() {
+    const canvas = document.getElementById("bg");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 60;
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const POINT_COUNT = 140;
+    const positions = new Float32Array(POINT_COUNT * 3);
+    const pts = [];
+    for (let i = 0; i < POINT_COUNT; i++) {
+      const p = new THREE.Vector3(
+        (Math.random() - 0.5) * 160,
+        (Math.random() - 0.5) * 160,
+        (Math.random() - 0.5) * 160
+      );
+      pts.push(p);
+      positions[i * 3] = p.x;
+      positions[i * 3 + 1] = p.y;
+      positions[i * 3 + 2] = p.z;
+    }
+
+    const pointGeo = new THREE.BufferGeometry();
+    pointGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const pointMat = new THREE.PointsMaterial({ color: 0x9B82FF, size: 1.3, transparent: true, opacity: 0.55 });
+    group.add(new THREE.Points(pointGeo, pointMat));
+
+    const linePositions = [];
+    const MAX_DIST = 20;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        if (pts[i].distanceTo(pts[j]) < MAX_DIST) {
+          linePositions.push(pts[i].x, pts[i].y, pts[i].z, pts[j].x, pts[j].y, pts[j].z);
+        }
+      }
+    }
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(linePositions), 3));
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x9B82FF, transparent: true, opacity: 0.06 });
+    group.add(new THREE.LineSegments(lineGeo, lineMat));
+
+    let mouseX = 0, mouseY = 0;
+    window.addEventListener("mousemove", (e) => {
+      mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+      mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+    });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      group.rotation.y += 0.0007;
+      group.rotation.x += 0.00015;
+      camera.position.x += (mouseX * 6 - camera.position.x) * 0.02;
+      camera.position.y += (-mouseY * 6 - camera.position.y) * 0.02;
+      camera.lookAt(scene.position);
+      renderer.render(scene, camera);
+    }
+    animate();
+  })();
+</script>
+
+</body>
+</html>

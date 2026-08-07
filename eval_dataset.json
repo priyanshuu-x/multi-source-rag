@@ -1,0 +1,9 @@
+[
+  {
+    "question": "What is retrieval-augmented generation?",
+    "ground_truth": "RAG combines a retrieval step (finding relevant documents) with a generation step (an LLM producing an answer using those documents as context)."
+  },
+  {
+    "question": "What is hybrid search?"
+  }
+]
