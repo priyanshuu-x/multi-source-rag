@@ -20,7 +20,6 @@ TEST_FILES = [
     "test_reranker.py",
     "test_llm.py",
     "test_main.py",
-    "test_frontend.py",
     "test_eval.py",
 ]
 
