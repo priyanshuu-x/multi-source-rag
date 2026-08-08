@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -13,6 +14,11 @@ from reranker import rerank
 from llm import generate_answer
 
 app = FastAPI(title="Multi-Source RAG API")
+
+# Resolved relative to this file's own location, not the process's working
+# directory - FileResponse("frontend.html") looked fine locally but breaks
+# the moment main.py is run from anywhere else (Docker, a different cwd, etc.)
+FRONTEND_PATH = Path(__file__).parent / "frontend.html"
 
 # Allows the Streamlit frontend (different port = different origin) to call this API.
 # "*" is fine for local/beginner use - a real production deploy should restrict this
@@ -45,7 +51,7 @@ def health():
 
 @app.get("/", include_in_schema=False)
 def serve_frontend():
-    return FileResponse("frontend.html")
+    return FileResponse(FRONTEND_PATH)
 
 
 @traceable(run_type="chain", name="upload_file_pipeline")

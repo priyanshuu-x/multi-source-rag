@@ -4,5 +4,4 @@ __pycache__/
 .git/
 .env
 eval_results.json
-test_*.py
-run_all_tests.py
+tests/
