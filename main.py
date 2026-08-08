@@ -143,5 +143,15 @@ def ask(request: AskRequest):
 
 
 if __name__ == "__main__":
+    import threading
+    import webbrowser
     import uvicorn
+
+    url = "http://localhost:8000"
+    print(f"\nStarting up - your browser will open automatically at {url}")
+    print(f"(If it doesn't, open that link manually - not the 0.0.0.0 address shown below, that's just the server's bind address, not a real link.)\n")
+
+    # Give the server a moment to actually start listening before opening the tab
+    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
